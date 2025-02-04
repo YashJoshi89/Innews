@@ -1,0 +1,49 @@
+name: Deploy Streamlit App to EC2
+
+on:
+  push:
+    branches:
+      - main  # Runs on push to main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set up SSH Connection
+      run: |
+        echo "$EC2_KEY" > private_key.pem
+        chmod 600 private_key.pem
+
+    - name: Deploy to EC2
+      run: |
+        ssh -o StrictHostKeyChecking=no -i private_key.pem $EC2_USER@$EC2_HOST << 'EOF'
+        # Navigate to home directory
+        cd /home/ec2-user/
+
+        # Install dependencies if not installed
+        sudo yum update -y
+        sudo yum install python3-pip git -y
+        pip3 install --upgrade pip
+
+        # Clone the repository if not exists, otherwise pull the latest changes
+        if [ ! -d "streamlit-news-app" ]; then
+          git clone https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO.git streamlit-news-app
+        fi
+        cd streamlit-news-app
+        git pull origin main
+
+        # Install Python dependencies
+        pip3 install -r requirements.txt
+
+        # Kill any running Streamlit instances
+        pkill -f streamlit || true
+
+        # Start the Streamlit app in the background
+        nohup streamlit run app.py --server.port 8501 --server.enableCORS false > streamlit.log 2>&1 &
+
+        echo "Deployment Complete!"
+        EOF
